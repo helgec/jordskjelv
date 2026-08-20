@@ -19,8 +19,19 @@ def on_message(ws, message):
         region = props.get("flynn_region", "Ukjent område")
         depth = props.get("depth")
         time = props.get("time")
+        unid = props.get("unid")  # Henter unik ID for skjelvet
+
+        # Genererer direkte lenke til SeismicPortal
+        url = (
+            f"https://seismicportal.eu/eventdetails.html?unid={unid}"
+            if unid
+            else None
+        )
 
         if mag and mag >= MIN_MAGNITUDE:
+            # Formaterer lenken i Slack-format: <URL|Visningstekst>
+            link_text = f"\n• *Lenke:* <{url}|Se kart og detaljer>" if url else ""
+
             payload = {
                 "text": (
                     f"🚨 *Nytt jordskjelv registrert!*\n"
@@ -28,6 +39,7 @@ def on_message(ws, message):
                     f"• *Område:* {region}\n"
                     f"• *Dybde:* {depth} km\n"
                     f"• *Tid (UTC):* {time}"
+                    f"{link_text}"
                 )
             }
             requests.post(SLACK_WEBHOOK_URL, json=payload)
