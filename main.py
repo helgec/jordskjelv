@@ -62,9 +62,3 @@ if __name__ == "__main__":
         on_open=on_open,
     )
     ws.run_forever()
-import time
-
-if __name__ == "__main__":
-    while True:
-        main()
-        time.sleep(45)  # Venter 15 minutter (900 sekunder) før neste sjekk
