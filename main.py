@@ -1,8 +1,14 @@
 import json
 import os
+import time
+import sys
 import requests
 import websocket
 from dotenv import load_dotenv
+
+# Importer status-hjelperen
+sys.path.append("/home/nrknyheter")
+from status_helper import update_status
 
 load_dotenv()
 
@@ -41,7 +47,7 @@ def on_message(ws, message):
 
         region = props.get("flynn_region", "Ukjent område")
         depth = props.get("depth")
-        time = props.get("time")
+        event_time = props.get("time")
 
         url = f"https://seismicportal.eu/eventdetails.html?unid={unid}"
 
@@ -58,32 +64,45 @@ def on_message(ws, message):
                     f"• *Styrke:* M {mag}\n"
                     f"• *Område:* 🌍 {region}\n"
                     f"• *Dybde:* 🪨 {depth} km\n"
-                    f"• *Tid (UTC):* ⏱️ {time}"
+                    f"• *Tid (UTC):* ⏱️ {event_time}"
                     f"{link_text}"
                 )
             }
-            requests.post(SLACK_WEBHOOK_URL, json=payload)
+            requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
+
     except Exception as e:
-        print(f"Feil: {e}")
+        print(f"Feil ved behandling av jordskjelvmelding: {e}")
+        update_status("jordskjelv", "Jordskjelv-overvåker", status="ERROR", error_msg=f"Meldingsfeil: {e}")
+
 
 def on_open(ws):
     print("Tilkoblet SeismicPortal. Lytter etter skjelv...")
+    # Registrerer at tilkoblingen er opprettet og alt er OK
+    update_status("jordskjelv", "Jordskjelv-overvåker", status="OK")
+
+
+def on_error(ws, error):
+    print(f"WebSocket-feil: {error}")
+    update_status("jordskjelv", "Jordskjelv-overvåker", status="ERROR", error_msg=str(error))
+
 
 if __name__ == "__main__":
     if not SLACK_WEBHOOK_URL:
         print("FEIL: SLACK_WEBHOOK_URL mangler i .env")
-        exit(1)
+        update_status("jordskjelv", "Jordskjelv-overvåker", status="ERROR", error_msg="Mangler SLACK_WEBHOOK_URL i .env")
+        sys.exit(1)
 
-    # Forhindrer at den krasjer og starter på nytt ved midlertidige nettverksfeil
     while True:
         try:
             ws = websocket.WebSocketApp(
                 "wss://www.seismicportal.eu/standing_order/websocket",
                 on_message=on_message,
                 on_open=on_open,
+                on_error=on_error,
             )
-            ws.run_forever(ping_interval=30, ping_timeout=10) # Holder tilkoblingen i live
+            # Holder tilkoblingen i live
+            ws.run_forever(ping_interval=30, ping_timeout=10)
         except Exception as e:
             print(f"WebSocket-tilkobling brutt, prøver på nytt... Feil: {e}")
-            import time
-            time.sleep(5) # Vent litt før vi prøver å koble til igjen
+            update_status("jordskjelv", "Jordskjelv-overvåker", status="ERROR", error_msg=f"Tilkoblingsbrudd: {e}")
+            time.sleep(5)
